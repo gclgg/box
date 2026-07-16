@@ -1,6 +1,4 @@
-// 站点: 4KVM
-// 版本: 1.0
-// 兼容: 蜂蜜影视, 影视仓
+// 4KVM.js - 符合 drpy 规范
 
 var rule = {
     title: '4KVM影视',
@@ -10,25 +8,28 @@ var rule = {
     class_name: '电影&电视剧&动漫',
     class_url: '1&2&3',
     headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://www.4kvm.top',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     },
+    timeout: 15,
+    
+    // 一级解析规则：列表页
     一级: 'div[data-vod-id];div[data-vod-id];h3.text-white&&Text;img&&data-src;.text-green-500,.text-yellow-400&&Text',
+    
+    // 二级解析规则：详情页
     二级: {
-        title: 'h1.text-xl&&Text',
-        img: 'img.w-full||img[src]&&src',
+        title: 'h1.text-xl&&Text||h1&&Text',
+        img: 'img.w-full&&src||img[src]&&src',
         desc: '.rounded-lg div.grid&&Text',
         content: '.rounded-lg div.grid&&Text',
-        director: '导演\\s*([^主\\n]+)',
-        actor: '主演\\s*([^剧\\n]+)',
         tabs: '[x-data*="episodeManager"] a[data-line]&&data-line',
         lists: '[x-data*="episodeManager"] a[data-episode]'
     },
+    
+    // 搜索解析规则
     搜索: 'div[data-vod-id];div[data-vod-id];h3.text-white&&Text;img&&data-src;.text-green-500,.text-yellow-400&&Text'
 };
 
-// 首页分类 + 推荐
+// 首页分类
 function home(filter) {
     var html = request(rule.host + '/');
     var classes = [
@@ -42,46 +43,75 @@ function home(filter) {
         var cards = pdfa(html, 'div[data-vod-id]');
         for (var i = 0; i < Math.min(cards.length, 20); i++) {
             var card = cards[i];
-            var vod_id = getAttr(card, 'data-vod-id');
-            if (!vod_id) {
-                var a = pdfa(card, 'a.block[href^="/play/"]');
-                if (a && a.length > 0) {
-                    var href = getAttr(a[0], 'href');
-                    vod_id = href.replace('/play/', '').trim();
-                }
+            // 直接使用 pdfh 提取
+            var vod_id = pdfh(card, 'a.block[href^="/play/"]&&href');
+            if (vod_id) {
+                vod_id = vod_id.replace('/play/', '').trim();
+            } else {
+                vod_id = pdfh(card, '&&data-vod-id');
             }
             if (!vod_id) continue;
             
-            var title = pdfh(card, 'h3.text-white&&Text') || pdfh(card, 'h3&&Text');
-            if (!title) continue;
+            var vod_name = pdfh(card, 'h3.text-white&&Text') || pdfh(card, 'h3&&Text');
+            if (!vod_name) continue;
             
-            var pic = pdfh(card, 'img&&data-src');
-            if (pic && !pic.startsWith('data:')) {
-                if (!pic.startsWith('http')) pic = 'https:' + pic;
+            var vod_pic = pdfh(card, 'img&&data-src') || pdfh(card, 'img&&src');
+            if (vod_pic && !vod_pic.startsWith('data:') && vod_pic) {
+                if (!vod_pic.startsWith('http')) vod_pic = 'https:' + vod_pic;
             }
             
-            var remarks = pdfh(card, '.text-green-500&&Text') || pdfh(card, '.text-yellow-400&&Text') || '';
+            var vod_remarks = pdfh(card, '.text-green-500&&Text') || pdfh(card, '.text-yellow-400&&Text') || '';
             
             list.push({
                 vod_id: vod_id,
-                vod_name: title,
-                vod_pic: pic,
-                vod_remarks: remarks
+                vod_name: vod_name,
+                vod_pic: vod_pic,
+                vod_remarks: vod_remarks
             });
         }
     }
     
     return JSON.stringify({
         class: classes,
-        list: list,
-        filters: getFilters()
+        list: list
     });
 }
 
-// 首页推荐（简版）
+// 首页推荐
 function homeVod() {
-    var result = JSON.parse(home(false));
-    return JSON.stringify({ list: result.list || [] });
+    var html = request(rule.host + '/');
+    var list = [];
+    if (html) {
+        var cards = pdfa(html, 'div[data-vod-id]');
+        for (var i = 0; i < Math.min(cards.length, 20); i++) {
+            var card = cards[i];
+            var vod_id = pdfh(card, 'a.block[href^="/play/"]&&href');
+            if (vod_id) {
+                vod_id = vod_id.replace('/play/', '').trim();
+            } else {
+                vod_id = pdfh(card, '&&data-vod-id');
+            }
+            if (!vod_id) continue;
+            
+            var vod_name = pdfh(card, 'h3.text-white&&Text') || pdfh(card, 'h3&&Text');
+            if (!vod_name) continue;
+            
+            var vod_pic = pdfh(card, 'img&&data-src') || pdfh(card, 'img&&src');
+            if (vod_pic && !vod_pic.startsWith('data:') && vod_pic) {
+                if (!vod_pic.startsWith('http')) vod_pic = 'https:' + vod_pic;
+            }
+            
+            var vod_remarks = pdfh(card, '.text-green-500&&Text') || pdfh(card, '.text-yellow-400&&Text') || '';
+            
+            list.push({
+                vod_id: vod_id,
+                vod_name: vod_name,
+                vod_pic: vod_pic,
+                vod_remarks: vod_remarks
+            });
+        }
+    }
+    return JSON.stringify({ list: list });
 }
 
 // 分类列表
@@ -108,36 +138,33 @@ function category(tid, pg, filter, extend) {
         var cards = pdfa(html, 'div[data-vod-id]');
         for (var i = 0; i < cards.length; i++) {
             var card = cards[i];
-            var vod_id = getAttr(card, 'data-vod-id');
-            if (!vod_id) {
-                var a = pdfa(card, 'a.block[href^="/play/"]');
-                if (a && a.length > 0) {
-                    var href = getAttr(a[0], 'href');
-                    vod_id = href.replace('/play/', '').trim();
-                }
+            var vod_id = pdfh(card, 'a.block[href^="/play/"]&&href');
+            if (vod_id) {
+                vod_id = vod_id.replace('/play/', '').trim();
+            } else {
+                vod_id = pdfh(card, '&&data-vod-id');
             }
             if (!vod_id) continue;
             
-            var title = pdfh(card, 'h3.text-white&&Text') || pdfh(card, 'h3&&Text');
-            if (!title) continue;
+            var vod_name = pdfh(card, 'h3.text-white&&Text') || pdfh(card, 'h3&&Text');
+            if (!vod_name) continue;
             
-            var pic = pdfh(card, 'img&&data-src');
-            if (pic && !pic.startsWith('data:')) {
-                if (!pic.startsWith('http')) pic = 'https:' + pic;
+            var vod_pic = pdfh(card, 'img&&data-src') || pdfh(card, 'img&&src');
+            if (vod_pic && !vod_pic.startsWith('data:') && vod_pic) {
+                if (!vod_pic.startsWith('http')) vod_pic = 'https:' + vod_pic;
             }
             
-            var remarks = pdfh(card, '.text-green-500&&Text') || pdfh(card, '.text-yellow-400&&Text') || '';
+            var vod_remarks = pdfh(card, '.text-green-500&&Text') || pdfh(card, '.text-yellow-400&&Text') || '';
             
             list.push({
                 vod_id: vod_id,
-                vod_name: title,
-                vod_pic: pic,
-                vod_remarks: remarks
+                vod_name: vod_name,
+                vod_pic: vod_pic,
+                vod_remarks: vod_remarks
             });
         }
     }
     
-    // 计算总页数
     var pagecount = page;
     if (html) {
         var pageMatch = html.match(/共\s*(\d+)\s*页/);
@@ -167,16 +194,16 @@ function detail(vod_id) {
     var vod_name = pdfh(html, 'h1.text-xl&&Text') || pdfh(html, 'h1&&Text') || pdfh(html, 'h2&&Text') || vod_id;
     
     var vod_pic = pdfh(html, 'img.w-full&&src') || pdfh(html, 'img[src]&&src') || '';
-    if (vod_pic && !vod_pic.startsWith('data:')) {
+    if (vod_pic && !vod_pic.startsWith('data:') && vod_pic) {
         if (!vod_pic.startsWith('http')) vod_pic = 'https:' + vod_pic;
     }
     
-    var infoText = pdfh(html, '.rounded-lg div.grid&&Text') || '';
-    
+    // 提取信息
     var vod_director = '';
     var vod_actor = '';
     var vod_content = '';
     
+    var infoText = pdfh(html, '.rounded-lg div.grid&&Text') || '';
     if (infoText) {
         var dirMatch = infoText.match(/导演\s*([^主\n]+)/);
         if (dirMatch) vod_director = dirMatch[1].trim();
@@ -192,52 +219,33 @@ function detail(vod_id) {
     var play_from_list = [];
     var play_url_list = [];
     
-    var episodeManager = pdfh(html, '[x-data*="episodeManager"]');
-    if (episodeManager) {
-        // 提取线路名称
-        var lineNames = [];
-        var nameMatches = episodeManager.match(/lineName\s*:\s*'([^']+)'/g);
-        if (nameMatches) {
-            for (var i = 0; i < nameMatches.length; i++) {
-                var m = nameMatches[i].match(/'([^']+)'/);
-                if (m) lineNames.push(m[1]);
-            }
-        }
-        
-        // 提取分集链接
-        var episodeLinks = pdfa(html, '[x-data*="episodeManager"] a[data-episode]');
-        var lines_eps = {};
-        
+    // 提取线路和分集
+    var episodeLinks = pdfa(html, '[x-data*="episodeManager"] a[data-episode]');
+    if (episodeLinks && episodeLinks.length > 0) {
+        // 按线路分组
+        var linesEps = {};
         for (var i = 0; i < episodeLinks.length; i++) {
-            var a = episodeLinks[i];
-            var line = getAttr(a, 'data-line') || '1';
-            var ep = getAttr(a, 'data-episode');
-            var href = getAttr(a, 'href');
-            
+            var link = episodeLinks[i];
+            var line = pdfh(link, '&&data-line') || '1';
+            var ep = pdfh(link, '&&data-episode');
+            var href = pdfh(link, '&&href');
             if (!href || !ep) continue;
-            var full_url = href.startsWith('http') ? href : rule.host + href;
-            
-            if (!lines_eps[line]) lines_eps[line] = [];
-            lines_eps[line].push({ ep: parseInt(ep), url: full_url });
+            var fullUrl = href.startsWith('http') ? href : rule.host + href;
+            if (!linesEps[line]) linesEps[line] = [];
+            linesEps[line].push({ ep: parseInt(ep), url: fullUrl });
         }
         
-        var lineKeys = Object.keys(lines_eps).sort(function(a, b) { return parseInt(a) - parseInt(b); });
+        var lineKeys = Object.keys(linesEps).sort(function(a, b) { return parseInt(a) - parseInt(b); });
         for (var i = 0; i < lineKeys.length; i++) {
             var key = lineKeys[i];
-            var eps = lines_eps[key];
+            var eps = linesEps[key];
             eps.sort(function(a, b) { return a.ep - b.ep; });
             
             var lineName = '线路' + key;
-            if (lineNames && lineNames.length > 0) {
-                var idx = parseInt(key) - 1;
-                if (idx >= 0 && idx < lineNames.length) lineName = lineNames[idx];
-            }
-            
             var epStrs = [];
             for (var j = 0; j < eps.length; j++) {
                 epStrs.push('第' + eps[j].ep + '集$' + eps[j].url);
             }
-            
             play_from_list.push(lineName);
             play_url_list.push(epStrs.join('#'));
         }
@@ -249,9 +257,6 @@ function detail(vod_id) {
         play_url_list.push('播放$' + vod_id);
     }
     
-    var vod_play_from = play_from_list.join('$$$');
-    var vod_play_url = play_url_list.join('$$$');
-    
     var result = [{
         vod_id: vod_id,
         vod_name: vod_name,
@@ -261,8 +266,8 @@ function detail(vod_id) {
         vod_director: vod_director,
         vod_area: '',
         vod_year: '',
-        vod_play_from: vod_play_from,
-        vod_play_url: vod_play_url
+        vod_play_from: play_from_list.join('$$$'),
+        vod_play_url: play_url_list.join('$$$')
     }];
     
     return JSON.stringify({ list: result });
@@ -277,59 +282,52 @@ function search(wd, quick, pg) {
     
     if (html) {
         var cards = pdfa(html, 'div[data-vod-id]');
-        
-        // 如果没有 data-vod-id，降级处理
-        if (cards.length === 0) {
-            var links = pdfa(html, 'a.block[href^="/play/"]');
-            for (var i = 0; i < Math.min(links.length, 30); i++) {
-                var a = links[i];
-                var href = getAttr(a, 'href');
-                var vod_id = href.replace('/play/', '').trim();
+        if (cards && cards.length > 0) {
+            for (var i = 0; i < Math.min(cards.length, 30); i++) {
+                var card = cards[i];
+                var vod_id = pdfh(card, 'a.block[href^="/play/"]&&href');
+                if (vod_id) {
+                    vod_id = vod_id.replace('/play/', '').trim();
+                } else {
+                    vod_id = pdfh(card, '&&data-vod-id');
+                }
                 if (!vod_id) continue;
                 
-                var title = pdfh(a, 'h3&&Text') || href;
-                if (!title) continue;
+                var vod_name = pdfh(card, 'h3.text-white&&Text') || pdfh(card, 'h3&&Text');
+                if (!vod_name) continue;
                 
-                var pic = pdfh(a, 'img&&data-src') || '';
-                if (pic && !pic.startsWith('data:')) {
-                    if (!pic.startsWith('http')) pic = 'https:' + pic;
+                var vod_pic = pdfh(card, 'img&&data-src') || pdfh(card, 'img&&src');
+                if (vod_pic && !vod_pic.startsWith('data:') && vod_pic) {
+                    if (!vod_pic.startsWith('http')) vod_pic = 'https:' + vod_pic;
                 }
+                
+                var vod_remarks = pdfh(card, '.text-green-500&&Text') || pdfh(card, '.text-yellow-400&&Text') || '';
                 
                 list.push({
                     vod_id: vod_id,
-                    vod_name: title,
-                    vod_pic: pic,
-                    vod_remarks: ''
+                    vod_name: vod_name,
+                    vod_pic: vod_pic,
+                    vod_remarks: vod_remarks
                 });
             }
         } else {
-            for (var i = 0; i < Math.min(cards.length, 30); i++) {
-                var card = cards[i];
-                var vod_id = getAttr(card, 'data-vod-id');
-                if (!vod_id) {
-                    var a = pdfa(card, 'a.block[href^="/play/"]');
-                    if (a && a.length > 0) {
-                        var href = getAttr(a[0], 'href');
-                        vod_id = href.replace('/play/', '').trim();
-                    }
-                }
+            // 降级处理
+            var links = pdfa(html, 'a.block[href^="/play/"]');
+            for (var i = 0; i < Math.min(links.length, 30); i++) {
+                var a = links[i];
+                var href = pdfh(a, '&&href');
+                var vod_id = href.replace('/play/', '').trim();
                 if (!vod_id) continue;
-                
-                var title = pdfh(card, 'h3.text-white&&Text') || pdfh(card, 'h3&&Text');
-                if (!title) continue;
-                
-                var pic = pdfh(card, 'img&&data-src');
-                if (pic && !pic.startsWith('data:')) {
-                    if (!pic.startsWith('http')) pic = 'https:' + pic;
+                var vod_name = pdfh(a, 'h3&&Text') || href;
+                var vod_pic = pdfh(a, 'img&&data-src') || pdfh(a, 'img&&src') || '';
+                if (vod_pic && !vod_pic.startsWith('data:') && vod_pic) {
+                    if (!vod_pic.startsWith('http')) vod_pic = 'https:' + vod_pic;
                 }
-                
-                var remarks = pdfh(card, '.text-green-500&&Text') || pdfh(card, '.text-yellow-400&&Text') || '';
-                
                 list.push({
                     vod_id: vod_id,
-                    vod_name: title,
-                    vod_pic: pic,
-                    vod_remarks: remarks
+                    vod_name: vod_name,
+                    vod_pic: vod_pic,
+                    vod_remarks: ''
                 });
             }
         }
@@ -350,23 +348,4 @@ function play(flag, id, flags) {
         url: url,
         header: rule.headers
     });
-}
-
-// ================= 辅助函数 =================
-
-// 获取元素属性
-function getAttr(elem, attr) {
-    if (typeof elem === 'string') {
-        var match = elem.match(new RegExp(attr + '=["\']([^"\']*)["\']'));
-        return match ? match[1] : '';
-    }
-    // 在 drpy 中，元素是字符串，所以上面的逻辑已经处理
-    return '';
-}
-
-// 获取筛选（简化版）
-function getFilters() {
-    var filters = {};
-    // 简化处理，返回空筛选
-    return filters;
 }
