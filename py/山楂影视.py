@@ -1,7 +1,7 @@
- # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # 本资源来源于互联网公开渠道，仅可用于个人学习爬虫技术。
 # 严禁将其用于任何商业用途，下载后请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任。
-#junyouyun
+# junyouyun
 
 import sys
 import json
@@ -9,7 +9,6 @@ import time
 import base64
 import hashlib
 import urllib3
-import concurrent.futures
 from urllib.parse import quote
 from base.spider import Spider
 from Crypto.PublicKey import RSA
@@ -40,6 +39,10 @@ class Spider(Spider):
         'client': "app",
         'deviceType': "Android"
     }
+
+    # ---------- 必须返回源名称，否则影视仓解析时闪退 ----------
+    def getName(self):
+        return "山楂影视"
 
     # ---------- RSA 加密 ----------
     def rsa_encrypt(self, data: str) -> str:
@@ -98,52 +101,60 @@ class Spider(Spider):
         }
         return headers, {"key": encrypted_key}
 
-    # ---------- 原有接口（保持不变） ----------
+    # ---------- 原有接口 ----------
     def init(self, extend=''):
         self.headers['deviceId'] = self.DEVICE_ID
         self.host = 'http://qkys.qukanwh.com'
-        response = self.fetch(f'{self.host}/api/v1/app/user/visitorInfo', headers=self.headers).json()
-        self.userid = response['data']['id']
-        token = response['data']['token']
-        self.headers['token'] = token
+        try:
+            response = self.fetch(f'{self.host}/api/v1/app/user/visitorInfo', headers=self.headers).json()
+            self.userid = response['data']['id']
+            token = response['data']['token']
+            self.headers['token'] = token
+        except Exception:
+            self.userid = ''
+            self.headers['token'] = ''
 
     def homeContent(self, filter):
-        response = self.post(f'{self.host}/api/v1/app/screen/screenType', headers=self.headers).json()
-        data = response['data']
-        classes = []
-        for i in data:
-            classes.append({'type_id': i['id'], 'type_name': i['name']})
-        return {'class': classes}
+        try:
+            response = self.post(f'{self.host}/api/v1/app/screen/screenType', headers=self.headers).json()
+            data = response.get('data', [])
+            classes = []
+            for i in data:
+                classes.append({'type_id': i['id'], 'type_name': i['name']})
+            return {'class': classes}
+        except Exception:
+            return {'class': []}
 
+    # ---------- 影视仓对并发支持差，改为串行请求 ----------
     def homeVideoContent(self):
-        response = self.post(f'{self.host}/api/v1/app/recommend/recommendList', headers=self.headers).json()
-        data = response['data']
-        videos = []
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_to_id = {
-                executor.submit(
-                    self.post,
-                    f'{self.host}/api/v1/app/recommend/recommendSubList',
-                    data=json.dumps({
-                        "condition": item['id'],
-                        "pageNum": 1,
-                        "pageSize": 6
-                    }),
-                    headers=self.headers
-                ): item['id'] for item in data
-            }
-            for future in concurrent.futures.as_completed(future_to_id):
+        try:
+            response = self.post(f'{self.host}/api/v1/app/recommend/recommendList', headers=self.headers).json()
+            data = response.get('data', [])
+            videos = []
+            # 限制最多取前 8 个分类，防止请求过多导致超时或内存问题
+            for item in data[:8]:
                 try:
-                    response = future.result().json()
-                    for video in response['data']['records']:
+                    resp = self.post(
+                        f'{self.host}/api/v1/app/recommend/recommendSubList',
+                        data=json.dumps({
+                            "condition": item['id'],
+                            "pageNum": 1,
+                            "pageSize": 6
+                        }),
+                        headers=self.headers
+                    ).json()
+                    records = resp.get('data', {}).get('records', [])
+                    for video in records:
                         videos.append({
-                            "vod_id": video['id'],
-                            "vod_name": video['name'],
-                            "vod_pic": video['cover']
+                            "vod_id": video.get('id', ''),
+                            "vod_name": video.get('name', ''),
+                            "vod_pic": video.get('cover', '')
                         })
-                except Exception as e:
-                    print(f"Request failed for item {future_to_id[future]}: {str(e)}")
-        return {'list': videos}
+                except Exception:
+                    continue
+            return {'list': videos}
+        except Exception:
+            return {'list': []}
 
     def categoryContent(self, tid, pg, filter, extend):
         payload = {
@@ -157,17 +168,20 @@ class Spider(Spider):
             "pageNum": pg,
             "pageSize": 40
         }
-        response = self.post(f'{self.host}/api/v1/app/screen/screenMovie', data=json.dumps(payload), headers=self.headers).json()
-        videos = []
-        for i in response['data']['records']:
-            videos.append({
-                "vod_id": i['id'],
-                "vod_name": i['name'],
-                "vod_pic": i['cover'],
-                "vod_remarks": i['area'],
-                "vod_year": i['year']
-            })
-        return {'list': videos, 'page': pg}
+        try:
+            response = self.post(f'{self.host}/api/v1/app/screen/screenMovie', data=json.dumps(payload), headers=self.headers).json()
+            videos = []
+            for i in response.get('data', {}).get('records', []):
+                videos.append({
+                    "vod_id": i['id'],
+                    "vod_name": i['name'],
+                    "vod_pic": i['cover'],
+                    "vod_remarks": i.get('area', ''),
+                    "vod_year": i.get('year', '')
+                })
+            return {'list': videos, 'page': pg}
+        except Exception:
+            return {'list': [], 'page': pg}
 
     def searchContent(self, key, quick, pg='1'):
         payload = {
@@ -177,23 +191,26 @@ class Spider(Spider):
             "pageNum": pg,
             "pageSize": 40
         }
-        response = self.post(f'{self.host}/api/v1/app/search/searchMovie', data=json.dumps(payload), headers=self.headers).json()
-        videos = []
-        for i in response['data']['records']:
-            videos.append({
-                'vod_id': i['id'],
-                'vod_name': i['name'],
-                'vod_pic': i['cover'],
-                'vod_remarks': i['area'],
-                'vod_year': i['year'],
-                'vod_area': i['area'],
-                'vod_content': i['desc']
-            })
-        return {'list': videos, 'page': pg}
+        try:
+            response = self.post(f'{self.host}/api/v1/app/search/searchMovie', data=json.dumps(payload), headers=self.headers).json()
+            videos = []
+            for i in response.get('data', {}).get('records', []):
+                videos.append({
+                    'vod_id': i['id'],
+                    'vod_name': i['name'],
+                    'vod_pic': i['cover'],
+                    'vod_remarks': i.get('area', ''),
+                    'vod_year': i.get('year', ''),
+                    'vod_area': i.get('area', ''),
+                    'vod_content': i.get('desc', '')
+                })
+            return {'list': videos, 'page': pg}
+        except Exception:
+            return {'list': [], 'page': pg}
 
-    # ---------- 详情页（已集成解密） ----------
+    # ---------- 详情页 ----------
     def detailContent(self, ids):
-        type_id = "M15"  # 注意：原脚本写死为 M17，可根据需要修改
+        type_id = "M15"
         vid = ids[0]
         body = {
             "id": vid,
@@ -215,29 +232,30 @@ class Spider(Spider):
         )
         headers, payload = self.build_encrypted_headers(body_json, params_str)
 
-        # 发送加密请求
-        resp_raw = self.post(f'{self.host}/api/v1/app/play/movieDetails', data=json.dumps(payload), headers=headers).json()
-        encrypted_data = resp_raw.get('data')
-        if not encrypted_data:
-            raise Exception("响应中 data 为空")
-        # 解密 data 字段
-        decrypted_json_str = self.rsa_decrypt(encrypted_data)
-        data = json.loads(decrypted_json_str)
+        try:
+            resp_raw = self.post(f'{self.host}/api/v1/app/play/movieDetails', data=json.dumps(payload), headers=headers).json()
+            encrypted_data = resp_raw.get('data')
+            if not encrypted_data:
+                return {'list': []}
+            decrypted_json_str = self.rsa_decrypt(encrypted_data)
+            data = json.loads(decrypted_json_str)
+        except Exception:
+            return {'list': []}
 
-        # 后续处理与原脚本相同
-        currentplayerid = data['playerId']
+        currentplayerid = data.get('playerId', '')
         play_urls = []
         play_url = []
         show = []
-        for i in data['episodeList']:
+        episode_list = data.get('episodeList', [])
+        for i in episode_list:
             play_url.append(f"{i['episode']}${ids[0]}@{currentplayerid}@{i['id']}@episode")
         play_urls.append('#'.join(play_url))
-        moviePlayerList = data['moviePlayerList']
+        moviePlayerList = data.get('moviePlayerList', [])
         for i2 in moviePlayerList:
-            if i2['id'] == currentplayerid:
-                show.append(i2['moviePlayerName'])
+            if i2.get('id') == currentplayerid:
+                show.append(i2.get('moviePlayerName', ''))
         for j in moviePlayerList:
-            playerid = j['id']
+            playerid = j.get('id')
             episodeTotal = j.get('episodeTotal')
             if playerid == currentplayerid or episodeTotal is None:
                 continue
@@ -245,35 +263,34 @@ class Spider(Spider):
             for k in range(1, episodeTotal + 1):
                 play_url.append(f"第{k}集${k}@{playerid}@{ids[0]}@virtual")
             play_urls.append('#'.join(play_url))
-            if j['moviePlayerName'] not in show:
-                show.append(j['moviePlayerName'])
+            if j.get('moviePlayerName', '') not in show:
+                show.append(j.get('moviePlayerName', ''))
 
-        # 获取简介（此接口可能无需加密，保持原样）
-        payload_desc = {
-            "id": ids[0],
-            "typeId": type_id
-        }
-        response_desc = self.post(f'{self.host}/api/v1/app/play/movieDesc', data=json.dumps(payload_desc), headers=self.headers).json()
-        data2 = response_desc['data']
+        try:
+            payload_desc = {"id": ids[0], "typeId": type_id}
+            response_desc = self.post(f'{self.host}/api/v1/app/play/movieDesc', data=json.dumps(payload_desc), headers=self.headers).json()
+            data2 = response_desc.get('data', {})
+        except Exception:
+            data2 = {}
 
         video = {
-            'vod_id': data2['id'],
-            'vod_name': data2['name'],
-            'vod_pic': data2['cover'],
-            'vod_content': data2['introduce'],
-            'vod_year': data2['year'],
-            'vod_area': data2['area'],
+            'vod_id': data2.get('id', vid),
+            'vod_name': data2.get('name', ''),
+            'vod_pic': data2.get('cover', ''),
+            'vod_content': data2.get('introduce', ''),
+            'vod_year': data2.get('year', ''),
+            'vod_area': data2.get('area', ''),
             'vod_remarks': '',
-            'vod_score': data2['score'],
-            'type_name': data2['classify'],
-            'vod_director': data2['director'],
-          	'vod_actor': data2['star'],
-            'vod_play_from': '$$$'.join(show),
-            'vod_play_url': '$$$'.join(play_urls)
+            'vod_score': data2.get('score', ''),
+            'type_name': data2.get('classify', ''),
+            'vod_director': data2.get('director', ''),
+            'vod_actor': data2.get('star', ''),
+            'vod_play_from': '$$$'.join(show) if show else '山楂影视',
+            'vod_play_url': '$$$'.join(play_urls) if play_urls else ''
         }
         return {'list': [video]}
 
-    # ---------- 播放页（已集成解密） ----------
+    # ---------- 播放页 ----------
     def playerContent(self, flag, id, vipflags):
         param, playerid, param2, param3 = id.split('@')
         if param3 == 'virtual':
@@ -297,7 +314,6 @@ class Spider(Spider):
                 "episodeIndex": ""
             }
         body_json = json.dumps(payload, separators=(',', ':'))
-        print(body_json)
         params_str = self.build_params_string(
             episode_id=payload.get("episodeId", ""),
             episode_index=payload.get("episodeIndex", ""),
@@ -306,39 +322,44 @@ class Spider(Spider):
             type_id=payload["typeId"],
             user_id=str(payload["userId"])
         )
-        print(params_str)
         headers, encrypted_payload = self.build_encrypted_headers(body_json, params_str)
-        print(headers)
-        print(encrypted_payload)
-        # 获取播放信息（加密响应）
-        resp_raw = self.post(f'{self.host}/api/v1/app/play/movieDetails', data=json.dumps(encrypted_payload), headers=headers).json()
-        encrypted_data = resp_raw.get('data')
-        if not encrypted_data:
-            raise Exception("响应中 data 为空")
-        decrypted_json_str = self.rsa_decrypt(encrypted_data)
-        data = json.loads(decrypted_json_str)
-        print(data)
-        parse_url = data['url']
-        playerid = data['playerId']
+        try:
+            resp_raw = self.post(f'{self.host}/api/v1/app/play/movieDetails', data=json.dumps(encrypted_payload), headers=headers).json()
+            encrypted_data = resp_raw.get('data')
+            if not encrypted_data:
+                return {'jx': '0', 'parse': '0', 'url': '', 'header': {}}
+            decrypted_json_str = self.rsa_decrypt(encrypted_data)
+            data = json.loads(decrypted_json_str)
+        except Exception:
+            return {'jx': '0', 'parse': '0', 'url': '', 'header': {}}
 
-        # 调用分析接口（注：analysisMovieUrl 的响应可能也是加密的，但原脚本直接取 data，这里暂不做额外解密）
+        parse_url = data.get('url', '')
+        playerid = data.get('playerId', '')
+
         analysis_body = {
             "playerUrl": parse_url,
             "playerId": playerid
         }
-        analysis_json = json.dumps(analysis_body, separators=(',', ':'))
-        # analysisMovieUrl 接口的参数拼接？理论上也需要签名，但原脚本是 GET 方式，为了兼容，我们沿用原脚本的 GET 方式
-        # 原脚本使用 fetch GET 带参数，并未加密。这里也采用 GET 方式，不使用加密 headers
-        resp_analysis = self.fetch(f"{self.host}/api/v1/app/play/analysisMovieUrl?playerUrl={quote(parse_url,safe='')}&playerId={playerid}", headers=self.headers).json()
-        url = resp_analysis.get('data')
+        try:
+            resp_analysis = self.fetch(
+                f"{self.host}/api/v1/app/play/analysisMovieUrl?playerUrl={quote(parse_url, safe='')}&playerId={playerid}",
+                headers=self.headers
+            ).json()
+            url = resp_analysis.get('data', '')
+        except Exception:
+            url = ''
 
-        return {'jx': '0', 'parse': '0', 'url': url, 'header': {'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'}}
-
-    def getName(self):
-        pass
+        return {
+            'jx': '0',
+            'parse': '0',
+            'url': url,
+            'header': {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
+            }
+        }
 
     def isVideoFormat(self, url):
-        pass
+        return False
 
     def manualVideoCheck(self):
         pass
