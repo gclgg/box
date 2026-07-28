@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-# 本资源来源于互联网公开渠道，仅可用于个人学习爬虫技术。
-# 严禁将其用于任何商业用途，下载后请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任。
-# junyouyun
+# 山楂影视 - 影视仓首页兼容版
 
 import sys
 import json
@@ -122,7 +120,7 @@ class Spider(Spider):
         except Exception:
             return {'class': [], 'filters': {}}
 
-    # ---------- 影视仓首页必须返回 page / pagecount，否则内容被丢弃 ----------
+    # ========== 修复首页推荐：确保数据完整 ==========
     def homeVideoContent(self):
         try:
             response = self.post(
@@ -131,16 +129,19 @@ class Spider(Spider):
             ).json()
             data = response.get('data', []) or []
             videos = []
-            # 影视仓对首页加载时间极敏感，只取第 1 个分类，避免超时导致整体返回空
-            if isinstance(data, list) and len(data) > 0:
-                item = data[0]
-                if isinstance(item, dict) and 'id' in item:
+            
+            # 取前3个分类，每个分类取6条，凑够首页数据
+            count = 0
+            for item in data[:3]:
+                if not isinstance(item, dict) or 'id' not in item:
+                    continue
+                try:
                     resp = self.post(
                         f'{self.host}/api/v1/app/recommend/recommendSubList',
                         data=json.dumps({
                             "condition": item['id'],
                             "pageNum": 1,
-                            "pageSize": 12
+                            "pageSize": 8
                         }),
                         headers=self.headers
                     ).json()
@@ -148,27 +149,59 @@ class Spider(Spider):
                     for video in records:
                         if not isinstance(video, dict):
                             continue
+                        # 确保所有字段都有值
+                        vod_id = str(video.get('id', ''))
+                        vod_name = str(video.get('name', '未命名'))
+                        vod_pic = str(video.get('cover', ''))
+                        vod_remarks = str(video.get('area', '') or video.get('remark', '') or '更新中')
+                        
+                        # 如果海报为空，使用占位图
+                        if not vod_pic or vod_pic == '':
+                            vod_pic = 'https://via.placeholder.com/300x400/2c3e50/ffffff?text=' + vod_name
+                        
                         videos.append({
-                            "vod_id": str(video.get('id', '')),
-                            "vod_name": str(video.get('name', '')),
-                            "vod_pic": str(video.get('cover', '')),
-                            "vod_remarks": str(video.get('area', '') or video.get('remark', '') or '')
+                            "vod_id": vod_id,
+                            "vod_name": vod_name,
+                            "vod_pic": vod_pic,
+                            "vod_remarks": vod_remarks
                         })
-            # 影视仓解析首页 list 时，如果缺少 page / pagecount 会直接不渲染
+                        count += 1
+                        if count >= 24:  # 限制24条，避免数据过大
+                            break
+                except Exception:
+                    continue
+                if count >= 24:
+                    break
+            
+            # 如果一条数据都没有，返回占位数据
+            if not videos:
+                videos = [{
+                    "vod_id": "1",
+                    "vod_name": "暂无数据",
+                    "vod_pic": "https://via.placeholder.com/300x400/2c3e50/ffffff?text=暂无数据",
+                    "vod_remarks": "请搜索"
+                }]
+            
             return {
                 'list': videos,
                 'page': 1,
                 'pagecount': 1,
-                'limit': 12,
+                'limit': len(videos),
                 'total': len(videos)
             }
-        except Exception:
+        except Exception as e:
+            # 出错时返回占位数据，确保首页不空
             return {
-                'list': [],
+                'list': [{
+                    "vod_id": "1",
+                    "vod_name": "加载失败",
+                    "vod_pic": "https://via.placeholder.com/300x400/2c3e50/ffffff?text=加载失败",
+                    "vod_remarks": "请检查网络"
+                }],
                 'page': 1,
                 'pagecount': 1,
-                'limit': 0,
-                'total': 0
+                'limit': 1,
+                'total': 1
             }
 
     def categoryContent(self, tid, pg, filter, extend):
@@ -191,10 +224,13 @@ class Spider(Spider):
             ).json()
             videos = []
             for i in response.get('data', {}).get('records', []) or []:
+                vod_pic = str(i.get('cover', ''))
+                if not vod_pic:
+                    vod_pic = 'https://via.placeholder.com/300x400/2c3e50/ffffff?text=' + str(i.get('name', ''))
                 videos.append({
                     "vod_id": str(i.get('id', '')),
                     "vod_name": str(i.get('name', '')),
-                    "vod_pic": str(i.get('cover', '')),
+                    "vod_pic": vod_pic,
                     "vod_remarks": str(i.get('area', '')),
                     "vod_year": str(i.get('year', ''))
                 })
@@ -230,10 +266,13 @@ class Spider(Spider):
             ).json()
             videos = []
             for i in response.get('data', {}).get('records', []) or []:
+                vod_pic = str(i.get('cover', ''))
+                if not vod_pic:
+                    vod_pic = 'https://via.placeholder.com/300x400/2c3e50/ffffff?text=' + str(i.get('name', ''))
                 videos.append({
                     'vod_id': str(i.get('id', '')),
                     'vod_name': str(i.get('name', '')),
-                    'vod_pic': str(i.get('cover', '')),
+                    'vod_pic': vod_pic,
                     'vod_remarks': str(i.get('area', '')),
                     'vod_year': str(i.get('year', '')),
                     'vod_area': str(i.get('area', '')),
