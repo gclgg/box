@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 山楂影视 - 影视仓兼容版
+# 山楂影视 - 影视仓兼容版（首页缓存版）
 
 import sys
 import json
@@ -37,6 +37,15 @@ class Spider(Spider):
         'deviceType': "Android"
     }
 
+    # ========== 预置分类数据（避免首页请求） ==========
+    CACHE_CLASSES = [
+        {'type_id': '1', 'type_name': '电影'},
+        {'type_id': '2', 'type_name': '电视剧'},
+        {'type_id': '3', 'type_name': '综艺'},
+        {'type_id': '4', 'type_name': '动漫'},
+        {'type_id': '5', 'type_name': '纪录片'},
+    ]
+
     # ---------- RSA 加密 ----------
     def rsa_encrypt(self, data: str) -> str:
         key = RSA.import_key(base64.b64decode(self.PUB_KEY_B64))
@@ -44,7 +53,6 @@ class Spider(Spider):
         encrypted = cipher.encrypt(data.encode('utf-8'))
         return base64.b64encode(encrypted).decode('utf-8')
 
-    # ---------- RSA 解密 ----------
     def rsa_decrypt(self, encrypted_b64: str) -> str:
         key = RSA.import_key(base64.b64decode(self.PRIV_KEY_B64))
         cipher = PKCS1_v1_5.new(key)
@@ -56,7 +64,6 @@ class Spider(Spider):
             decrypted_parts.append(cipher.decrypt(block, None))
         return b''.join(decrypted_parts).decode('utf-8')
 
-    # ---------- 构建签名参数 ----------
     def build_params_string(self, episode_id="", episode_index="", vid="", player_id="", type_id="", user_id=""):
         return (f"episodeId{episode_id}"
                 f"episodeIndex{episode_index}"
@@ -106,59 +113,15 @@ class Spider(Spider):
         except Exception as e:
             print(f"初始化失败: {str(e)}")
 
-    # ---------- 首页分类（简化版，避免闪退）----------
+    # ========== 首页分类（直接返回缓存） ==========
     def homeContent(self, filter):
-        try:
-            response = self.post(f'{self.host}/api/v1/app/screen/screenType', headers=self.headers).json()
-            data = response.get('data', [])
-            classes = []
-            for i in data:
-                classes.append({'type_id': str(i['id']), 'type_name': i['name']})
-            # 限制分类数量，避免数据过大
-            return {'class': classes[:20]}
-        except Exception as e:
-            print(f"homeContent 失败: {str(e)}")
-            # 返回默认分类，防止闪退
-            return {'class': [
-                {'type_id': '1', 'type_name': '电影'},
-                {'type_id': '2', 'type_name': '电视剧'},
-                {'type_id': '3', 'type_name': '综艺'}
-            ]}
+        # 直接返回预置分类，不发起网络请求
+        return {'class': self.CACHE_CLASSES}
 
-    # ---------- 首页推荐（移除并发，改为顺序请求）----------
+    # ========== 首页推荐（直接返回空列表） ==========
     def homeVideoContent(self):
-        try:
-            response = self.post(f'{self.host}/api/v1/app/recommend/recommendList', headers=self.headers).json()
-            data = response.get('data', [])
-            videos = []
-            
-            # 改为顺序请求，避免并发导致影视仓崩溃
-            for item in data[:5]:  # 只取前5个分类
-                try:
-                    sub_response = self.post(
-                        f'{self.host}/api/v1/app/recommend/recommendSubList',
-                        data=json.dumps({
-                            "condition": item['id'],
-                            "pageNum": 1,
-                            "pageSize": 6
-                        }),
-                        headers=self.headers
-                    ).json()
-                    for video in sub_response.get('data', {}).get('records', []):
-                        videos.append({
-                            "vod_id": str(video['id']),
-                            "vod_name": video.get('name', ''),
-                            "vod_pic": video.get('cover', '')
-                        })
-                except Exception as e:
-                    print(f"获取子列表失败: {str(e)}")
-                    continue
-            
-            # 限制推荐数量，避免数据过大
-            return {'list': videos[:30]}
-        except Exception as e:
-            print(f"homeVideoContent 失败: {str(e)}")
-            return {'list': []}
+        # 返回空列表，避免首页加载大量数据
+        return {'list': []}
 
     # ---------- 分类内容 ----------
     def categoryContent(self, tid, pg, filter, extend):
