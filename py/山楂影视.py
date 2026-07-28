@@ -41,16 +41,6 @@ class Spider(Spider):
     def getName(self):
         return "山楂影视"
 
-    # ---------- 辅助方法：从各种嵌套结构中提取列表 ----------
-    def _extract_list(self, data):
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            for key in ['list', 'types', 'records', 'items', 'categories', 'result', 'data']:
-                if key in data and isinstance(data[key], list):
-                    return data[key]
-        return []
-
     def rsa_encrypt(self, data: str) -> str:
         key = RSA.import_key(base64.b64decode(self.PUB_KEY_B64))
         cipher = PKCS1_v1_5.new(key)
@@ -117,79 +107,69 @@ class Spider(Spider):
             self.userid = ''
             self.headers['token'] = ''
 
-    # ---------- 首页分类：影视仓对返回结构极其敏感 ----------
     def homeContent(self, filter):
         try:
             response = self.post(f'{self.host}/api/v1/app/screen/screenType', headers=self.headers).json()
-            raw_data = response.get('data', [])
-            # API 可能返回列表，也可能返回 {"list": [...]} 等嵌套结构
-            data_list = self._extract_list(raw_data)
-            
+            data = response.get('data', []) or []
             classes = []
-            for i in data_list:
+            for i in data:
                 if isinstance(i, dict) and 'id' in i and 'name' in i:
                     classes.append({
                         'type_id': str(i['id']),
                         'type_name': str(i['name'])
                     })
-            
-            # 影视仓必须同时有 class 和 filters，否则首页不渲染
             return {'class': classes, 'filters': {}}
         except Exception:
             return {'class': [], 'filters': {}}
 
-    # ---------- 首页推荐：只发一次请求，避免超时导致整体空白 ----------
+    # ---------- 影视仓首页必须返回 page / pagecount，否则内容被丢弃 ----------
     def homeVideoContent(self):
-        videos = []
         try:
-            # 第一步：获取推荐分类列表
-            resp = self.post(
+            response = self.post(
                 f'{self.host}/api/v1/app/recommend/recommendList',
                 headers=self.headers
             ).json()
-            raw_data = resp.get('data', [])
-            data_list = self._extract_list(raw_data)
-            
-            if not data_list:
-                return {'list': []}
-            
-            # 只取第一个分类，避免串行请求过多超时
-            item = data_list[0]
-            if not isinstance(item, dict) or 'id' not in item:
-                return {'list': []}
-            
-            # 第二步：获取该分类下的视频
-            sub_resp = self.post(
-                f'{self.host}/api/v1/app/recommend/recommendSubList',
-                data=json.dumps({
-                    "condition": item['id'],
-                    "pageNum": 1,
-                    "pageSize": 6
-                }),
-                headers=self.headers
-            ).json()
-            
-            sub_raw = sub_resp.get('data', {})
-            records = self._extract_list(sub_raw)
-            # 有些接口返回 {"records": [...], "total": ...}
-            if isinstance(sub_raw, dict) and 'records' in sub_raw and isinstance(sub_raw['records'], list):
-                records = sub_raw['records']
-            
-            for video in records:
-                if not isinstance(video, dict):
-                    continue
-                videos.append({
-                    "vod_id": str(video.get('id', '')),
-                    "vod_name": str(video.get('name', '')),
-                    "vod_pic": str(video.get('cover', '')),
-                    "vod_remarks": str(video.get('area', '') or video.get('remark', '') or '')
-                })
-            
+            data = response.get('data', []) or []
+            videos = []
+            # 影视仓对首页加载时间极敏感，只取第 1 个分类，避免超时导致整体返回空
+            if isinstance(data, list) and len(data) > 0:
+                item = data[0]
+                if isinstance(item, dict) and 'id' in item:
+                    resp = self.post(
+                        f'{self.host}/api/v1/app/recommend/recommendSubList',
+                        data=json.dumps({
+                            "condition": item['id'],
+                            "pageNum": 1,
+                            "pageSize": 12
+                        }),
+                        headers=self.headers
+                    ).json()
+                    records = resp.get('data', {}).get('records', []) or []
+                    for video in records:
+                        if not isinstance(video, dict):
+                            continue
+                        videos.append({
+                            "vod_id": str(video.get('id', '')),
+                            "vod_name": str(video.get('name', '')),
+                            "vod_pic": str(video.get('cover', '')),
+                            "vod_remarks": str(video.get('area', '') or video.get('remark', '') or '')
+                        })
+            # 影视仓解析首页 list 时，如果缺少 page / pagecount 会直接不渲染
+            return {
+                'list': videos,
+                'page': 1,
+                'pagecount': 1,
+                'limit': 12,
+                'total': len(videos)
+            }
         except Exception:
-            pass
-        
-        # 影视仓 homeVideoContent 标准返回格式，不要加 page / pagecount 等字段
-        return {'list': videos}
+            return {
+                'list': [],
+                'page': 1,
+                'pagecount': 1,
+                'limit': 0,
+                'total': 0
+            }
 
     def categoryContent(self, tid, pg, filter, extend):
         payload = {
@@ -210,12 +190,7 @@ class Spider(Spider):
                 headers=self.headers
             ).json()
             videos = []
-            raw_data = response.get('data', {})
-            records = self._extract_list(raw_data)
-            if isinstance(raw_data, dict) and 'records' in raw_raw and isinstance(raw_data['records'], list):
-                records = raw_data['records']
-            
-            for i in records:
+            for i in response.get('data', {}).get('records', []) or []:
                 videos.append({
                     "vod_id": str(i.get('id', '')),
                     "vod_name": str(i.get('name', '')),
@@ -254,12 +229,7 @@ class Spider(Spider):
                 headers=self.headers
             ).json()
             videos = []
-            raw_data = response.get('data', {})
-            records = self._extract_list(raw_data)
-            if isinstance(raw_data, dict) and 'records' in raw_data and isinstance(raw_data['records'], list):
-                records = raw_data['records']
-            
-            for i in records:
+            for i in response.get('data', {}).get('records', []) or []:
                 videos.append({
                     'vod_id': str(i.get('id', '')),
                     'vod_name': str(i.get('name', '')),
@@ -398,7 +368,7 @@ class Spider(Spider):
                 "playerId": playerid,
                 "source": 0,
                 "typeId": "M15",
-                "UserId": self.userid,
+                "userId": self.userid,
                 "episodeIndex": ""
             }
         body_json = json.dumps(payload, separators=(',', ':'))
