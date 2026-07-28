@@ -20,12 +20,10 @@ sys.path.append('..')
 class Spider(Spider):
     host, userid, episode_list = '', '', []
     
-    # ---------- 加密与签名相关常量 ----------
     PUB_KEY_B64 = "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCoYt0BP77U+DM08BiI/QbSRIfxijXo85BTPqIM1Ow8BNwhLETzRIZ+dEwdWDbydG/PspgBAfRpGaYVdJYtvaC2JnoO8+Ik6qMWojfEJxSFLa0Pb0A892tun4gsxoEMjcreZ+YGyaBxAfqX0BSMfdrOgIYaZQjYrw9TRLlUT31QoQIDAQAB"
     APP_SIGN_SHA1 = "09a8dc51639a31801af5f6418caebfabc695eb24"
     DEVICE_ID = "2d590b9842d064a1"
     
-    # RSA 私钥（用于解密响应）
     PRIV_KEY_B64 = """MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCquQQ5r6+yJI8CDFkXRp8vUsdD45ov8EP12ooLs56ca2DQXaSNGS9910bAPVA9chkp0mKIvKqjAsHz5Tl9EeNPblarGEeJUIxpxZtiSqNTpvtiD/TjhpzuHYic7RAfQ/h7p/ypE8ymU42pYjsB5t26Mv6XgkLV+jzrSf73HlCuS0iMyLmt6zz3Mw9izM13EpB8iFLtfbbYymycKTx4RAmPQLwhNGex/AlUIYxXP4R2yyaa4W6mEtc6aME2QuzJFxPgP3HJ9NBx/LWVn4skxWjZ7zg+VRQRHnjyVaSLu3Z5gN5ITWCyE32qaHJa6WBahZj5jWhRyAG1bQ+xKJa8lBL5AgMBAAECggEAUwv9SjJ0PSwbhNuM2w23kcWquROWhYtTA91zGY4esehqB/IFgb2mpIh8Gje5OKqwIu/8jpd4SiOlRYdUF8sD0DfUYRZGdj2AkFNX6tBz8tVfo6wvbB6naA1lzzBij1L5JO3qsjS3cJFkb+kg2yP66AC2Z+0tpfk8eRhdtshAZwfcd1DEGt1uAvYL1eaUK9HRvpt9lPeGcHERDl2hBd4uyaF0K1O+zF9y59nYbTySWPxRZq3sFEE85xRMlstD7YZi7W2gKvMFRD4/FKmrZ3m7aKJRITtyKOyyPcYmepNv3Qv7kk59Pg38n2WWQ0Ra/bCH3E48YNCnQvZMpitkTfJhoQKBgQDbnROOYTP8OTJ6f/qhoGjxeO3x1VOaOp8l0x7b0SCfoqNGS0Cyiqj72BmJtPMPqSTjn6MmNzqbg1KOdhXyzNozs+i5ccW1M56j96mr5I/Z0FpE3oyIHNfDDBlf9M8YQqEF9oYxniYYft9oapO7cRQkHER6qpvnHTavwlv4m78CXwKBgQDHAjs2YlpKDdI1lcbZJCc7TwtH+Pd2bUki8YXafWNcPhITQHbOZjr310eK1QJC6GJncjkOqbX7yv3ivvTO35FZTQhuA1xEG1P00FG8bE0tHYPIwQHi9y0eA5cieMdo8E6XYria1mw/3fqSQEsfZyJlR32JQIoGAipM8iO1X2nZpwKBgDkMFIhnt5lNQk+P7wsNIDWZtDWdtJnboHuy29E+Abt2A/O+mI/IdRz2hau/1WO8DFkUnszOi+rZshhPlGP90rCbi1igtTrcrdjp/KkqNjPea5R4OwkgdOu1uOG0NheXNzzVTQaWjk7Opjn5dWa7eP/oV+GFb/oZHJuLYVizHGsBAoGADA7rjZEKDYCm4w5PPSr+oY5ZjaPdQrS+gLqHtMRyN82fBMGcMUdqfUfzEstzVqCEDeaS5HuOBlK3bXzKkppjUTjksN3NQmcxgBz7RuJ9DqXCLXDcb2cwuafYCYOt+YLOEEgwDVm+t2P44dG5e46hO+fICH/7nP+WlpD5buz4GfMCgYB57r3g/6hi9WUDnfc7ZAzWMqR0EhJVYKYy+KFEtdIPzhkkIHq5RASe88E9kzoGoZFdb3tIjvGZWcHerirrqWkMsuQtP/Qi0zjieid5tAPj+r4kbiCVTw0E0jnmPBzGInQi7lpeTTKnG1fbyS5lBS+WmHfIuzpECgCkxhaT+LJJkg=="""
 
     headers = {
@@ -43,14 +41,12 @@ class Spider(Spider):
     def getName(self):
         return "山楂影视"
 
-    # ---------- RSA 加密 ----------
     def rsa_encrypt(self, data: str) -> str:
         key = RSA.import_key(base64.b64decode(self.PUB_KEY_B64))
         cipher = PKCS1_v1_5.new(key)
         encrypted = cipher.encrypt(data.encode('utf-8'))
         return base64.b64encode(encrypted).decode('utf-8')
 
-    # ---------- RSA 解密（支持分块） ----------
     def rsa_decrypt(self, encrypted_b64: str) -> str:
         key = RSA.import_key(base64.b64decode(self.PRIV_KEY_B64))
         cipher = PKCS1_v1_5.new(key)
@@ -62,7 +58,6 @@ class Spider(Spider):
             decrypted_parts.append(cipher.decrypt(block, None))
         return b''.join(decrypted_parts).decode('utf-8')
 
-    # ---------- 构建签名参数 ----------
     def build_params_string(self, episode_id="", episode_index="", vid="", player_id="", type_id="", user_id=""):
         return (f"episodeId{episode_id}"
                 f"episodeIndex{episode_index}"
@@ -112,7 +107,6 @@ class Spider(Spider):
             self.userid = ''
             self.headers['token'] = ''
 
-    # ---------- 影视仓必须返回 filters，否则首页不渲染 ----------
     def homeContent(self, filter):
         try:
             response = self.post(f'{self.host}/api/v1/app/screen/screenType', headers=self.headers).json()
@@ -124,12 +118,11 @@ class Spider(Spider):
                         'type_id': str(i['id']),
                         'type_name': str(i['name'])
                     })
-            # 影视仓解析首页时，如果缺少 filters 字段会直接跳过该源
             return {'class': classes, 'filters': {}}
         except Exception:
             return {'class': [], 'filters': {}}
 
-    # ---------- 串行请求 + 限制分类数，防止影视仓超时 ----------
+    # ---------- 影视仓首页必须返回 page / pagecount，否则内容被丢弃 ----------
     def homeVideoContent(self):
         try:
             response = self.post(
@@ -138,17 +131,16 @@ class Spider(Spider):
             ).json()
             data = response.get('data', []) or []
             videos = []
-            # 影视仓对首页加载时间敏感，只取前 3 个分类，每个 6 条，避免超时
-            for item in (data[:3] if isinstance(data, list) else []):
-                try:
-                    if not isinstance(item, dict) or 'id' not in item:
-                        continue
+            # 影视仓对首页加载时间极敏感，只取第 1 个分类，避免超时导致整体返回空
+            if isinstance(data, list) and len(data) > 0:
+                item = data[0]
+                if isinstance(item, dict) and 'id' in item:
                     resp = self.post(
                         f'{self.host}/api/v1/app/recommend/recommendSubList',
                         data=json.dumps({
                             "condition": item['id'],
                             "pageNum": 1,
-                            "pageSize": 6
+                            "pageSize": 12
                         }),
                         headers=self.headers
                     ).json()
@@ -162,11 +154,22 @@ class Spider(Spider):
                             "vod_pic": str(video.get('cover', '')),
                             "vod_remarks": str(video.get('area', '') or video.get('remark', '') or '')
                         })
-                except Exception:
-                    continue
-            return {'list': videos}
+            # 影视仓解析首页 list 时，如果缺少 page / pagecount 会直接不渲染
+            return {
+                'list': videos,
+                'page': 1,
+                'pagecount': 1,
+                'limit': 12,
+                'total': len(videos)
+            }
         except Exception:
-            return {'list': []}
+            return {
+                'list': [],
+                'page': 1,
+                'pagecount': 1,
+                'limit': 0,
+                'total': 0
+            }
 
     def categoryContent(self, tid, pg, filter, extend):
         payload = {
@@ -195,9 +198,21 @@ class Spider(Spider):
                     "vod_remarks": str(i.get('area', '')),
                     "vod_year": str(i.get('year', ''))
                 })
-            return {'list': videos, 'page': int(pg) if str(pg).isdigit() else 1}
+            return {
+                'list': videos,
+                'page': int(pg) if str(pg).isdigit() else 1,
+                'pagecount': 999,
+                'limit': 40,
+                'total': 0
+            }
         except Exception:
-            return {'list': [], 'page': int(pg) if str(pg).isdigit() else 1}
+            return {
+                'list': [],
+                'page': int(pg) if str(pg).isdigit() else 1,
+                'pagecount': 999,
+                'limit': 40,
+                'total': 0
+            }
 
     def searchContent(self, key, quick, pg='1'):
         payload = {
@@ -224,9 +239,21 @@ class Spider(Spider):
                     'vod_area': str(i.get('area', '')),
                     'vod_content': str(i.get('desc', ''))
                 })
-            return {'list': videos, 'page': int(pg) if str(pg).isdigit() else 1}
+            return {
+                'list': videos,
+                'page': int(pg) if str(pg).isdigit() else 1,
+                'pagecount': 999,
+                'limit': 40,
+                'total': 0
+            }
         except Exception:
-            return {'list': [], 'page': int(pg) if str(pg).isdigit() else 1}
+            return {
+                'list': [],
+                'page': int(pg) if str(pg).isdigit() else 1,
+                'pagecount': 999,
+                'limit': 40,
+                'total': 0
+            }
 
     def detailContent(self, ids):
         type_id = "M15"
