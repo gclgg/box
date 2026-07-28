@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 山楂影视 - 影视仓兼容版（首页缓存版）
+# 山楂影视 - 蜂蜜影视 & 影视仓 双兼容版
 
 import sys
 import json
@@ -37,7 +37,7 @@ class Spider(Spider):
         'deviceType': "Android"
     }
 
-    # ========== 预置分类数据（避免首页请求） ==========
+    # ========== 预置分类数据（备用） ==========
     CACHE_CLASSES = [
         {'type_id': '1', 'type_name': '电影'},
         {'type_id': '2', 'type_name': '电视剧'},
@@ -113,14 +113,58 @@ class Spider(Spider):
         except Exception as e:
             print(f"初始化失败: {str(e)}")
 
-    # ========== 首页分类（直接返回缓存） ==========
+    # ========== 首页分类（智能兼容） ==========
     def homeContent(self, filter):
-        # 直接返回预置分类，不发起网络请求
+        # 优先从网络获取真实分类
+        try:
+            response = self.post(f'{self.host}/api/v1/app/screen/screenType', headers=self.headers).json()
+            data = response.get('data', [])
+            if data:
+                classes = []
+                for i in data:
+                    classes.append({'type_id': str(i['id']), 'type_name': i['name']})
+                return {'class': classes[:20]}
+        except Exception as e:
+            print(f"homeContent 网络请求失败，使用缓存: {str(e)}")
+        # 网络失败时返回缓存数据
         return {'class': self.CACHE_CLASSES}
 
-    # ========== 首页推荐（直接返回空列表） ==========
+    # ========== 首页推荐（智能兼容） ==========
     def homeVideoContent(self):
-        # 返回空列表，避免首页加载大量数据
+        videos = []
+        try:
+            # 先尝试获取真实推荐数据
+            response = self.post(f'{self.host}/api/v1/app/recommend/recommendList', headers=self.headers).json()
+            data = response.get('data', [])
+            
+            # 顺序请求，避免并发问题
+            for item in data[:5]:
+                try:
+                    sub_response = self.post(
+                        f'{self.host}/api/v1/app/recommend/recommendSubList',
+                        data=json.dumps({
+                            "condition": item['id'],
+                            "pageNum": 1,
+                            "pageSize": 6
+                        }),
+                        headers=self.headers
+                    ).json()
+                    for video in sub_response.get('data', {}).get('records', []):
+                        videos.append({
+                            "vod_id": str(video['id']),
+                            "vod_name": video.get('name', ''),
+                            "vod_pic": video.get('cover', '')
+                        })
+                except Exception as e:
+                    print(f"获取子列表失败: {str(e)}")
+                    continue
+            
+            if videos:
+                return {'list': videos[:30]}
+        except Exception as e:
+            print(f"homeVideoContent 失败: {str(e)}")
+        
+        # 如果获取失败，返回空列表（不影响蜂蜜影视的正常使用）
         return {'list': []}
 
     # ---------- 分类内容 ----------
