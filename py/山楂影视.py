@@ -40,7 +40,6 @@ class Spider(Spider):
         'deviceType': "Android"
     }
 
-    # ---------- 必须返回源名称，否则影视仓解析时闪退 ----------
     def getName(self):
         return "山楂影视"
 
@@ -101,39 +100,49 @@ class Spider(Spider):
         }
         return headers, {"key": encrypted_key}
 
-    # ---------- 原有接口 ----------
     def init(self, extend=''):
         self.headers['deviceId'] = self.DEVICE_ID
         self.host = 'http://qkys.qukanwh.com'
         try:
             response = self.fetch(f'{self.host}/api/v1/app/user/visitorInfo', headers=self.headers).json()
-            self.userid = response['data']['id']
-            token = response['data']['token']
+            self.userid = str(response.get('data', {}).get('id', ''))
+            token = response.get('data', {}).get('token', '')
             self.headers['token'] = token
         except Exception:
             self.userid = ''
             self.headers['token'] = ''
 
+    # ---------- 影视仓必须返回 filters，否则首页不渲染 ----------
     def homeContent(self, filter):
         try:
             response = self.post(f'{self.host}/api/v1/app/screen/screenType', headers=self.headers).json()
-            data = response.get('data', [])
+            data = response.get('data', []) or []
             classes = []
             for i in data:
-                classes.append({'type_id': i['id'], 'type_name': i['name']})
-            return {'class': classes}
+                if isinstance(i, dict) and 'id' in i and 'name' in i:
+                    classes.append({
+                        'type_id': str(i['id']),
+                        'type_name': str(i['name'])
+                    })
+            # 影视仓解析首页时，如果缺少 filters 字段会直接跳过该源
+            return {'class': classes, 'filters': {}}
         except Exception:
-            return {'class': []}
+            return {'class': [], 'filters': {}}
 
-    # ---------- 影视仓对并发支持差，改为串行请求 ----------
+    # ---------- 串行请求 + 限制分类数，防止影视仓超时 ----------
     def homeVideoContent(self):
         try:
-            response = self.post(f'{self.host}/api/v1/app/recommend/recommendList', headers=self.headers).json()
-            data = response.get('data', [])
+            response = self.post(
+                f'{self.host}/api/v1/app/recommend/recommendList',
+                headers=self.headers
+            ).json()
+            data = response.get('data', []) or []
             videos = []
-            # 限制最多取前 8 个分类，防止请求过多导致超时或内存问题
-            for item in data[:8]:
+            # 影视仓对首页加载时间敏感，只取前 3 个分类，每个 6 条，避免超时
+            for item in (data[:3] if isinstance(data, list) else []):
                 try:
+                    if not isinstance(item, dict) or 'id' not in item:
+                        continue
                     resp = self.post(
                         f'{self.host}/api/v1/app/recommend/recommendSubList',
                         data=json.dumps({
@@ -143,12 +152,15 @@ class Spider(Spider):
                         }),
                         headers=self.headers
                     ).json()
-                    records = resp.get('data', {}).get('records', [])
+                    records = resp.get('data', {}).get('records', []) or []
                     for video in records:
+                        if not isinstance(video, dict):
+                            continue
                         videos.append({
-                            "vod_id": video.get('id', ''),
-                            "vod_name": video.get('name', ''),
-                            "vod_pic": video.get('cover', '')
+                            "vod_id": str(video.get('id', '')),
+                            "vod_name": str(video.get('name', '')),
+                            "vod_pic": str(video.get('cover', '')),
+                            "vod_remarks": str(video.get('area', '') or video.get('remark', '') or '')
                         })
                 except Exception:
                     continue
@@ -165,50 +177,57 @@ class Spider(Spider):
                 "typeId": tid,
                 "year": ""
             },
-            "pageNum": pg,
+            "pageNum": int(pg) if str(pg).isdigit() else 1,
             "pageSize": 40
         }
         try:
-            response = self.post(f'{self.host}/api/v1/app/screen/screenMovie', data=json.dumps(payload), headers=self.headers).json()
+            response = self.post(
+                f'{self.host}/api/v1/app/screen/screenMovie',
+                data=json.dumps(payload),
+                headers=self.headers
+            ).json()
             videos = []
-            for i in response.get('data', {}).get('records', []):
+            for i in response.get('data', {}).get('records', []) or []:
                 videos.append({
-                    "vod_id": i['id'],
-                    "vod_name": i['name'],
-                    "vod_pic": i['cover'],
-                    "vod_remarks": i.get('area', ''),
-                    "vod_year": i.get('year', '')
+                    "vod_id": str(i.get('id', '')),
+                    "vod_name": str(i.get('name', '')),
+                    "vod_pic": str(i.get('cover', '')),
+                    "vod_remarks": str(i.get('area', '')),
+                    "vod_year": str(i.get('year', ''))
                 })
-            return {'list': videos, 'page': pg}
+            return {'list': videos, 'page': int(pg) if str(pg).isdigit() else 1}
         except Exception:
-            return {'list': [], 'page': pg}
+            return {'list': [], 'page': int(pg) if str(pg).isdigit() else 1}
 
     def searchContent(self, key, quick, pg='1'):
         payload = {
             "condition": {
                 "value": key
             },
-            "pageNum": pg,
+            "pageNum": int(pg) if str(pg).isdigit() else 1,
             "pageSize": 40
         }
         try:
-            response = self.post(f'{self.host}/api/v1/app/search/searchMovie', data=json.dumps(payload), headers=self.headers).json()
+            response = self.post(
+                f'{self.host}/api/v1/app/search/searchMovie',
+                data=json.dumps(payload),
+                headers=self.headers
+            ).json()
             videos = []
-            for i in response.get('data', {}).get('records', []):
+            for i in response.get('data', {}).get('records', []) or []:
                 videos.append({
-                    'vod_id': i['id'],
-                    'vod_name': i['name'],
-                    'vod_pic': i['cover'],
-                    'vod_remarks': i.get('area', ''),
-                    'vod_year': i.get('year', ''),
-                    'vod_area': i.get('area', ''),
-                    'vod_content': i.get('desc', '')
+                    'vod_id': str(i.get('id', '')),
+                    'vod_name': str(i.get('name', '')),
+                    'vod_pic': str(i.get('cover', '')),
+                    'vod_remarks': str(i.get('area', '')),
+                    'vod_year': str(i.get('year', '')),
+                    'vod_area': str(i.get('area', '')),
+                    'vod_content': str(i.get('desc', ''))
                 })
-            return {'list': videos, 'page': pg}
+            return {'list': videos, 'page': int(pg) if str(pg).isdigit() else 1}
         except Exception:
-            return {'list': [], 'page': pg}
+            return {'list': [], 'page': int(pg) if str(pg).isdigit() else 1}
 
-    # ---------- 详情页 ----------
     def detailContent(self, ids):
         type_id = "M15"
         vid = ids[0]
@@ -233,7 +252,11 @@ class Spider(Spider):
         headers, payload = self.build_encrypted_headers(body_json, params_str)
 
         try:
-            resp_raw = self.post(f'{self.host}/api/v1/app/play/movieDetails', data=json.dumps(payload), headers=headers).json()
+            resp_raw = self.post(
+                f'{self.host}/api/v1/app/play/movieDetails',
+                data=json.dumps(payload),
+                headers=headers
+            ).json()
             encrypted_data = resp_raw.get('data')
             if not encrypted_data:
                 return {'list': []}
@@ -246,51 +269,59 @@ class Spider(Spider):
         play_urls = []
         play_url = []
         show = []
-        episode_list = data.get('episodeList', [])
+        episode_list = data.get('episodeList', []) or []
         for i in episode_list:
             play_url.append(f"{i['episode']}${ids[0]}@{currentplayerid}@{i['id']}@episode")
-        play_urls.append('#'.join(play_url))
-        moviePlayerList = data.get('moviePlayerList', [])
+        if play_url:
+            play_urls.append('#'.join(play_url))
+        
+        moviePlayerList = data.get('moviePlayerList', []) or []
         for i2 in moviePlayerList:
             if i2.get('id') == currentplayerid:
-                show.append(i2.get('moviePlayerName', ''))
+                show.append(str(i2.get('moviePlayerName', '')))
+        
         for j in moviePlayerList:
             playerid = j.get('id')
             episodeTotal = j.get('episodeTotal')
             if playerid == currentplayerid or episodeTotal is None:
                 continue
             play_url = []
-            for k in range(1, episodeTotal + 1):
+            for k in range(1, int(episodeTotal) + 1):
                 play_url.append(f"第{k}集${k}@{playerid}@{ids[0]}@virtual")
-            play_urls.append('#'.join(play_url))
-            if j.get('moviePlayerName', '') not in show:
-                show.append(j.get('moviePlayerName', ''))
+            if play_url:
+                play_urls.append('#'.join(play_url))
+            name = j.get('moviePlayerName', '')
+            if name and name not in show:
+                show.append(str(name))
 
         try:
             payload_desc = {"id": ids[0], "typeId": type_id}
-            response_desc = self.post(f'{self.host}/api/v1/app/play/movieDesc', data=json.dumps(payload_desc), headers=self.headers).json()
-            data2 = response_desc.get('data', {})
+            response_desc = self.post(
+                f'{self.host}/api/v1/app/play/movieDesc',
+                data=json.dumps(payload_desc),
+                headers=self.headers
+            ).json()
+            data2 = response_desc.get('data', {}) or {}
         except Exception:
             data2 = {}
 
         video = {
-            'vod_id': data2.get('id', vid),
-            'vod_name': data2.get('name', ''),
-            'vod_pic': data2.get('cover', ''),
-            'vod_content': data2.get('introduce', ''),
-            'vod_year': data2.get('year', ''),
-            'vod_area': data2.get('area', ''),
+            'vod_id': str(data2.get('id', vid)),
+            'vod_name': str(data2.get('name', '')),
+            'vod_pic': str(data2.get('cover', '')),
+            'vod_content': str(data2.get('introduce', '')),
+            'vod_year': str(data2.get('year', '')),
+            'vod_area': str(data2.get('area', '')),
             'vod_remarks': '',
-            'vod_score': data2.get('score', ''),
-            'type_name': data2.get('classify', ''),
-            'vod_director': data2.get('director', ''),
-            'vod_actor': data2.get('star', ''),
+            'vod_score': str(data2.get('score', '')),
+            'type_name': str(data2.get('classify', '')),
+            'vod_director': str(data2.get('director', '')),
+            'vod_actor': str(data2.get('star', '')),
             'vod_play_from': '$$$'.join(show) if show else '山楂影视',
             'vod_play_url': '$$$'.join(play_urls) if play_urls else ''
         }
         return {'list': [video]}
 
-    # ---------- 播放页 ----------
     def playerContent(self, flag, id, vipflags):
         param, playerid, param2, param3 = id.split('@')
         if param3 == 'virtual':
@@ -324,7 +355,11 @@ class Spider(Spider):
         )
         headers, encrypted_payload = self.build_encrypted_headers(body_json, params_str)
         try:
-            resp_raw = self.post(f'{self.host}/api/v1/app/play/movieDetails', data=json.dumps(encrypted_payload), headers=headers).json()
+            resp_raw = self.post(
+                f'{self.host}/api/v1/app/play/movieDetails',
+                data=json.dumps(encrypted_payload),
+                headers=headers
+            ).json()
             encrypted_data = resp_raw.get('data')
             if not encrypted_data:
                 return {'jx': '0', 'parse': '0', 'url': '', 'header': {}}
@@ -336,10 +371,6 @@ class Spider(Spider):
         parse_url = data.get('url', '')
         playerid = data.get('playerId', '')
 
-        analysis_body = {
-            "playerUrl": parse_url,
-            "playerId": playerid
-        }
         try:
             resp_analysis = self.fetch(
                 f"{self.host}/api/v1/app/play/analysisMovieUrl?playerUrl={quote(parse_url, safe='')}&playerId={playerid}",
