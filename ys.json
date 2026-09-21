@@ -1102,6 +1102,156 @@
             },
             "changeable": 1
         },
+         
+
+  {
+            "key": "py_腾讯视频",
+            "name": "☀腾讯🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/腾讯视频.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ {
+            "key": "py_优酷视频",
+            "name": "☀优酷视频🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/优酷视频.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ {
+            "key": "py_低端影视",
+            "name": "☀低端影视🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/低端影视.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ {
+            "key": "py_嘀嗒影视",
+            "name": "☀嘀嗒影视🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/嘀嗒影视.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ {
+            "key": "py_毒舌影视",
+            "name": "☀毒舌影视🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/毒舌影视.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ 
+  {
+            "key": "py_爱壹帆影视",
+            "name": "☀爱壹帆🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/爱壹帆影视.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+  {
+            "key": "py_采集聚合",
+            "name": "☀采集聚合🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/采集聚合.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ {
+            "key": "py_茶杯狐",
+            "name": "☀茶杯狐🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/茶杯狐.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ {
+            "key": "py_妲己",
+            "name": "☀妲己🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/妲己.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ {
+            "key": "py_蛋挞TV",
+            "name": "☀蛋挞TV🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/蛋挞TV.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ 
+ {
+            "key": "py_河马剧场",
+            "name": "☀河马剧场🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/河马剧场.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ 
+ {
+            "key": "py_山楂影视",
+            "name": "☀山楂🔹影视",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/山楂影视.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ 
+{
+            "key": "py_红果",
+            "name": "☀红果🔹短剧",
+            "type": 3,
+            "api": "https://bd.gcl.de5.net/py/hongguo.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        },
+ 
         {
             "key": "Cat_91电视",
             "name": "📱91电视ᶜᵃᵗ丨直播",
@@ -1709,10 +1859,17 @@
             "url": "https://gh-proxy.com/https://raw.githubusercontent.com/develop202/migu_video/refs/heads/main/interface.txt",
             "ua": "okHttp/Mod-1.1.0"
         },
+         {
+      "name": "📡gcl-3in1",
+      "type": 0,
+      "url": "https://1xx.gcl.de5.net/simple.m3u"
+    
+    },
         {
-            "name": "📡体育直播",
+            "name": "📡gcl-ak",
             "type": 0,
-            "url": "http://82.156.243.185:33389/fwc.m3u"
+            "url": "http://fn.gcl.de5.net:1905/interface.m3u"
+
         },
         {
             "name": "📡裤佬直播",
