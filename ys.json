@@ -21,7 +21,7 @@
             "key": "卧龙资源",
             "name": "卧龙资源",
             "type": 3,
-            "api": "./卧龙资源.js",
+            "api": "./js/卧龙资源.js",
             "searchable": 1,
             "quickSearch": 1,
             "filterable": 0
