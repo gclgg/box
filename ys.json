@@ -1111,7 +1111,17 @@
             },
             "changeable": 1
         },
-         
+        {
+            "key": "py_剧pk影视",
+            "name": "📱剧ok｜APP",
+            "type": 3,
+            "api": "./py/剧ok影视.py",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "playerType": 2
+        }, 
 
   {
             "key": "py_腾讯视频",
